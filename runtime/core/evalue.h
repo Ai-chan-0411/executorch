@@ -589,7 +589,14 @@ executorch::aten::ArrayRef<T> BoxedEvalueList<T>::get() const {
   for (typename executorch::aten::ArrayRef<T>::size_type i = 0;
        i < wrapped_vals_.size();
        i++) {
-    ET_CHECK(wrapped_vals_[i] != nullptr);
+    // Validate the pointer and type at access time. MoveCall instructions can
+    // change the type of values_ entries after initial validation (TOCTOU).
+    // The to<T>() call below also checks via ET_CHECK_MSG, but this provides
+    // a clearer diagnostic for the TOCTOU case.
+    ET_CHECK_MSG(
+        wrapped_vals_[i] != nullptr,
+        "BoxedEvalueList element %zu is null",
+        (size_t)i);
     unwrapped_vals_[i] = wrapped_vals_[i]->template to<T>();
   }
   return executorch::aten::ArrayRef<T>{unwrapped_vals_, wrapped_vals_.size()};

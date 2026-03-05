@@ -20,6 +20,14 @@ BoxedEvalueList<std::optional<executorch::aten::Tensor>>::get() const {
     if (wrapped_vals_[i] == nullptr) {
       unwrapped_vals_[i] = executorch::aten::nullopt;
     } else {
+      // Validate type at access time. MoveCall instructions can change the
+      // type of values_ entries after initial validation (TOCTOU).
+      ET_CHECK_MSG(
+          wrapped_vals_[i]->isNone() || wrapped_vals_[i]->isTensor(),
+          "BoxedEvalueList<optional<Tensor>> element %zu has wrong type "
+          "(tag %u). Value may have been overwritten by MoveCall.",
+          (size_t)i,
+          static_cast<unsigned>(wrapped_vals_[i]->tag));
       unwrapped_vals_[i] =
           wrapped_vals_[i]->to<std::optional<executorch::aten::Tensor>>();
     }
