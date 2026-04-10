@@ -11,6 +11,9 @@
 
 #include <executorch/backends/vulkan/serialization/schema_generated.h>
 
+#include <executorch/backends/webgpu/runtime/WebGPUDevice.h>
+#include <webgpu/wgpu.h>
+
 #include <cstring>
 #include <stdexcept>
 
@@ -69,6 +72,13 @@ WebGPUGraph::~WebGPUGraph() {
 void WebGPUGraph::build(
     const void* flatbuffer_data,
     const uint8_t* constant_data) {
+  if (!device_) {
+    auto* ctx = get_default_webgpu_context();
+    if (ctx) {
+      device_ = ctx->device;
+      instance_ = ctx->instance;
+    }
+  }
   if (!device_) {
     throw std::runtime_error(
         "WebGPU device not available. "
@@ -289,6 +299,9 @@ void WebGPUGraph::copy_outputs(
         outputs[i].second,
         cb_info);
 
+    // Poll until the map callback fires.
+    wgpuDevicePoll(device_, true, nullptr);
+
     if (cb_data.status == WGPUMapAsyncStatus_Success) {
       const void* mapped =
           wgpuBufferGetConstMappedRange(output_staging_buffers_[i], 0, outputs[i].second);
@@ -298,6 +311,22 @@ void WebGPUGraph::copy_outputs(
       throw std::runtime_error("WebGPU buffer map failed for output");
     }
   }
+}
+
+WebGPUMemoryStats WebGPUGraph::memory_stats() const {
+  WebGPUMemoryStats stats;
+  for (size_t i = 0; i < value_types_.size(); i++) {
+    if (value_types_[i] == ValueType::Tensor && tensors_[i].nbytes > 0) {
+      stats.tensor_buffer_bytes += tensors_[i].nbytes;
+      stats.num_tensors++;
+    }
+  }
+  for (size_t i = 0; i < output_ids_.size(); i++) {
+    stats.staging_buffer_bytes += tensors_[output_ids_[i]].nbytes;
+  }
+  stats.uniform_buffer_bytes = uniform_buffer_bytes_;
+  stats.num_dispatches = static_cast<int>(dispatches_.size());
+  return stats;
 }
 
 } // namespace webgpu

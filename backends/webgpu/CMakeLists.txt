@@ -29,6 +29,7 @@ set(WEBGPU_SRCS
     runtime/WebGPUBackend.cpp
     runtime/WebGPUGraph.cpp
     runtime/WebGPUDelegateHeader.cpp
+    runtime/WebGPUDevice.cpp
     runtime/ops/OperatorRegistry.cpp
     runtime/ops/add/BinaryOp.cpp
 )
@@ -42,6 +43,37 @@ target_include_directories(
 
 target_link_libraries(webgpu_backend PRIVATE vulkan_schema executorch_core)
 
+# Native build: link against wgpu-native
+set(WGPU_NATIVE_DIR "${CMAKE_CURRENT_SOURCE_DIR}/third-party/wgpu-native"
+    CACHE PATH "Path to wgpu-native installation")
+
+if(NOT EXISTS "${WGPU_NATIVE_DIR}/lib/libwgpu_native.a")
+  message(FATAL_ERROR
+    "wgpu-native not found at ${WGPU_NATIVE_DIR}. "
+    "Run: bash backends/webgpu/scripts/setup-wgpu-native.sh")
+endif()
+
+add_library(wgpu_native STATIC IMPORTED)
+set_target_properties(wgpu_native PROPERTIES
+  IMPORTED_LOCATION "${WGPU_NATIVE_DIR}/lib/libwgpu_native.a"
+)
+
+target_include_directories(webgpu_backend
+  PUBLIC $<BUILD_INTERFACE:${WGPU_NATIVE_DIR}/include>
+)
+target_link_libraries(webgpu_backend PRIVATE wgpu_native)
+
+if(APPLE)
+  target_link_libraries(webgpu_backend PRIVATE
+    "-framework Metal"
+    "-framework QuartzCore"
+    "-framework CoreGraphics"
+    "-framework Foundation"
+  )
+else()
+  target_link_libraries(webgpu_backend PRIVATE dl m pthread)
+endif()
+
 target_compile_options(webgpu_backend PRIVATE -fexceptions)
 
 # Link with --whole-archive for static registration of backend + ops
@@ -54,3 +86,39 @@ install(
   EXPORT ExecuTorchTargets
   DESTINATION ${CMAKE_INSTALL_LIBDIR}
 )
+
+# Native test target
+if(EXECUTORCH_BUILD_WEBGPU_TEST)
+  add_executable(webgpu_native_test test/test_webgpu_native.cpp)
+
+  target_include_directories(webgpu_native_test
+    PRIVATE
+      $<BUILD_INTERFACE:${EXECUTORCH_ROOT}/..>
+      "${WGPU_NATIVE_DIR}/include"
+  )
+
+  target_link_libraries(webgpu_native_test
+    PRIVATE
+      webgpu_backend
+      wgpu_native
+      executorch_core
+      extension_module_static
+      extension_data_loader
+      extension_tensor
+      portable_kernels
+      portable_ops_lib
+  )
+
+  if(APPLE)
+    target_link_libraries(webgpu_native_test PRIVATE
+      "-framework Metal"
+      "-framework QuartzCore"
+      "-framework CoreGraphics"
+    )
+  else()
+    target_link_libraries(webgpu_native_test PRIVATE dl m pthread)
+  endif()
+
+  target_compile_options(webgpu_native_test PRIVATE -fexceptions)
+  set_property(TARGET webgpu_native_test PROPERTY CXX_STANDARD 17)
+endif()
