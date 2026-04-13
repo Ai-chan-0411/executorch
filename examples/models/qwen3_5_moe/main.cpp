@@ -9,8 +9,6 @@
 #include <gflags/gflags.h>
 
 #include <executorch/extension/llm/runner/llm_runner_helper.h>
-#include <executorch/extension/llm/runner/stats.h>
-#include <executorch/extension/llm/sampler/util.h>
 #include <executorch/extension/module/module.h>
 #include <executorch/extension/tensor/tensor.h>
 #include <executorch/runtime/backend/interface.h>
@@ -41,6 +39,25 @@ using ::executorch::runtime::EValue;
 
 using SizesType = executorch::aten::SizesType;
 
+// Read a sampled token from the model output tensor [B, 1].
+// The model performs Gumbel-max sampling on-device and returns a single
+// float token ID. This function copies it from GPU and casts to uint64.
+static uint64_t read_token(const executorch::aten::Tensor& output) {
+  const void* ptr = output.const_data_ptr();
+
+  cudaPointerAttributes attrs;
+  bool on_device = cudaPointerGetAttributes(&attrs, ptr) == cudaSuccess &&
+      attrs.type == cudaMemoryTypeDevice;
+
+  float val;
+  if (on_device) {
+    cudaMemcpy(&val, ptr, sizeof(float), cudaMemcpyDeviceToHost);
+  } else {
+    memcpy(&val, ptr, sizeof(float));
+  }
+  return static_cast<uint64_t>(val);
+}
+
 int main(int argc, char** argv) {
   gflags::ParseCommandLineFlags(&argc, &argv, true);
 
@@ -64,7 +81,7 @@ int main(int argc, char** argv) {
     return 1;
   }
 
-  // Create Module with share_memory_arenas=true so prefill and forward
+  // Create Module with share_memory_arenas=true so prefill and decode
   // share mutable buffers (KV cache, conv_state, recurrent_state).
   std::vector<std::string> data_files;
   if (!FLAGS_data_path.empty()) {
@@ -134,14 +151,24 @@ int main(int argc, char** argv) {
   printf("Prompt tokens: %ld\n", num_prompt_tokens);
 
   // ---------------------------------------------------------------
-  // Prefill or decode-only
+  // Temperature tensor (shared between prefill and decode)
   // ---------------------------------------------------------------
   auto S = [](int64_t v) -> SizesType { return static_cast<SizesType>(v); };
 
+  // Use a very small temperature for greedy to avoid division by zero
+  // while keeping the Gumbel noise negligible relative to logit differences.
+  float temp_val = FLAGS_temperature <= 0.0
+      ? 1e-6f
+      : static_cast<float>(FLAGS_temperature);
+  auto temp_tensor = from_blob(
+      &temp_val, {1}, executorch::aten::ScalarType::Float);
+
+  // ---------------------------------------------------------------
+  // Prefill
+  // ---------------------------------------------------------------
   uint64_t cur_token = 0;
   auto prefill_start = std::chrono::steady_clock::now();
 
-  // Chunked prefill
   std::vector<int64_t> pos_data(num_prompt_tokens);
   for (int64_t i = 0; i < num_prompt_tokens; i++) {
     pos_data[i] = i;
@@ -159,6 +186,7 @@ int main(int argc, char** argv) {
   std::vector<EValue> prefill_inputs;
   prefill_inputs.push_back(tokens_tensor);
   prefill_inputs.push_back(pos_tensor);
+  prefill_inputs.push_back(temp_tensor);
 
   auto prefill_result = module->execute(prefill_method, prefill_inputs);
   if (prefill_result.error() != Error::Ok) {
@@ -167,10 +195,7 @@ int main(int argc, char** argv) {
   }
   auto& prefill_outputs = prefill_result.get();
 
-  auto logits_tensor = prefill_outputs[0].toTensor();
-  auto logits_ptr =
-      std::make_shared<executorch::aten::Tensor>(std::move(logits_tensor));
-  cur_token = llm::logits_to_token(*logits_ptr, FLAGS_temperature);
+  cur_token = read_token(prefill_outputs[0].toTensor());
 
   auto prefill_end = std::chrono::steady_clock::now();
   double prefill_ms =
@@ -195,7 +220,6 @@ int main(int argc, char** argv) {
   // ---------------------------------------------------------------
   // Decode — generate tokens one at a time
   // ---------------------------------------------------------------
-  llm::Stats stats;
   int64_t pos = num_prompt_tokens;
   uint64_t prev_token;
 
@@ -215,6 +239,7 @@ int main(int argc, char** argv) {
     std::vector<EValue> decode_inputs;
     decode_inputs.push_back(EValue(decode_tokens));
     decode_inputs.push_back(EValue(decode_pos));
+    decode_inputs.push_back(EValue(temp_tensor));
 
     auto decode_result = module->execute("decode", decode_inputs);
     if (decode_result.error() != Error::Ok) {
@@ -223,14 +248,8 @@ int main(int argc, char** argv) {
     }
     auto& decode_outputs = decode_result.get();
 
-    auto step_logits = decode_outputs[0].toTensor();
-    auto step_logits_ptr =
-        std::make_shared<executorch::aten::Tensor>(std::move(step_logits));
-
     prev_token = cur_token;
-    stats.on_sampling_begin();
-    cur_token = llm::logits_to_token(*step_logits_ptr, FLAGS_temperature);
-    stats.on_sampling_end();
+    cur_token = read_token(decode_outputs[0].toTensor());
 
     pos++;
 
