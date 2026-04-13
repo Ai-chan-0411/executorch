@@ -109,7 +109,9 @@ set(_aoti_cuda_shim_sources runtime/shims/memory.cpp
 
 # Only build CUDA shims when CUDA language/toolchain is available.
 if(CMAKE_CUDA_COMPILER)
-  list(APPEND _aoti_cuda_shim_sources runtime/shims/int4mm.cu runtime/shims/rand.cu)
+  list(APPEND _aoti_cuda_shim_sources runtime/shims/int4mm.cu
+       runtime/shims/rand.cu
+  )
 endif()
 
 add_library(aoti_cuda_shims SHARED ${_aoti_cuda_shim_sources})

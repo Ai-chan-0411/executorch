@@ -80,8 +80,7 @@ namespace {
 constexpr char kSkipCopyOutputToCpuForMethod[] =
     "skip_copy_output_to_cpu_for_method";
 constexpr char kUseSharedCudaStream[] = "use_shared_cuda_stream";
-constexpr char kEnableCudaGraphForMethod[] =
-    "enable_cuda_graph_for_method";
+constexpr char kEnableCudaGraphForMethod[] = "enable_cuda_graph_for_method";
 constexpr int kCudaGraphWarmupSteps = 3;
 } // anonymous namespace
 
@@ -410,7 +409,9 @@ class ET_EXPERIMENTAL CudaBackend final
       cudaDeviceSynchronize();
       buffer_res->Free();
     } else {
-      ET_LOG(Info, "weights_blob '%s' not found or update fn is null",
+      ET_LOG(
+          Info,
+          "weights_blob '%s' not found or update fn is null",
           weights_blob_key.c_str());
     }
 
@@ -649,13 +650,17 @@ class ET_EXPERIMENTAL CudaBackend final
         void* static_ptr = nullptr;
         cudaError_t merr = cudaMalloc(&static_ptr, nbytes);
         ET_CHECK_OR_RETURN_ERROR(
-            merr == cudaSuccess, Internal,
+            merr == cudaSuccess,
+            Internal,
             "cudaMalloc for static input %zu failed: %s",
-            i, cudaGetErrorString(merr));
+            i,
+            cudaGetErrorString(merr));
 
         cudaMemcpy(
-            static_ptr, cpu_tensor->const_data_ptr(),
-            nbytes, cudaMemcpyHostToDevice);
+            static_ptr,
+            cpu_tensor->const_data_ptr(),
+            nbytes,
+            cudaMemcpyHostToDevice);
 
         handle->static_input_ptrs.push_back(static_ptr);
         handle->static_input_sizes.push_back(sizes_vec);
@@ -669,7 +674,8 @@ class ET_EXPERIMENTAL CudaBackend final
             slim::makeArrayRef(sizes_vec),
             slim::makeArrayRef(strides_vec),
             static_cast<slim::c10::ScalarType>(cpu_tensor->scalar_type()),
-            DEFAULT_CUDA_DEVICE, 0));
+            DEFAULT_CUDA_DEVICE,
+            0));
         continue;
       }
 
@@ -755,8 +761,8 @@ class ET_EXPERIMENTAL CudaBackend final
           "CUDA graph: beginning stream capture for '%s'",
           handle->method_name.c_str());
 
-      cudaError_t cerr = cudaStreamBeginCapture(
-          cuda_stream, cudaStreamCaptureModeRelaxed);
+      cudaError_t cerr =
+          cudaStreamBeginCapture(cuda_stream, cudaStreamCaptureModeRelaxed);
       ET_CHECK_OR_RETURN_ERROR(
           cerr == cudaSuccess,
           Internal,
@@ -791,8 +797,7 @@ class ET_EXPERIMENTAL CudaBackend final
 
     if (is_capture_step) {
       // End capture → instantiate graph
-      cudaError_t gerr =
-          cudaStreamEndCapture(cuda_stream, &handle->cuda_graph);
+      cudaError_t gerr = cudaStreamEndCapture(cuda_stream, &handle->cuda_graph);
       ET_CHECK_OR_RETURN_ERROR(
           gerr == cudaSuccess,
           Internal,
@@ -800,7 +805,8 @@ class ET_EXPERIMENTAL CudaBackend final
           cudaGetErrorString(gerr));
 
       gerr = cudaGraphInstantiate(
-          &handle->cuda_graph_exec, handle->cuda_graph,
+          &handle->cuda_graph_exec,
+          handle->cuda_graph,
           cudaGraphInstantiateFlagAutoFreeOnLaunch);
       ET_CHECK_OR_RETURN_ERROR(
           gerr == cudaSuccess,

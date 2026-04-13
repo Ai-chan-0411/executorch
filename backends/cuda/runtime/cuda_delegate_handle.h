@@ -73,7 +73,7 @@ struct CudaDelegateHandle : public aoti::AOTIDelegateHandle {
   // These hold the tensor metadata; the underlying data pointers are fixed
   // addresses that CUDA graph replay will write to / read from.
   // SlimTensor pointers — owned by this handle.
-  std::vector<void*> static_input_ptrs;  // raw GPU data pointers for inputs
+  std::vector<void*> static_input_ptrs; // raw GPU data pointers for inputs
   std::vector<void*> static_output_ptrs; // raw GPU data pointers for outputs
   std::vector<std::vector<int64_t>> static_input_sizes;
   std::vector<std::vector<int64_t>> static_input_strides;
