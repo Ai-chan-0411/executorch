@@ -20,11 +20,6 @@ from dataclasses import dataclass, field
 
 import torch
 import torch.nn as nn
-
-<<<<<<< gasoonjia/flashdecoding-pp-async-softmax
-from executorch.backends.cuda.triton.kernels.sdpa import sdpa, sdpa_decode_splitk
-=======
->>>>>>> main
 from torch.nn import functional as F
 
 
@@ -296,10 +291,6 @@ class FullAttention(nn.Module):
             # prefill (T>=2, dynamic). Each traces only one branch, so no
             # torch.cond is needed and we avoid GPU→CPU sync overhead.
             if T == 1 and self.use_splitk_decode:
-<<<<<<< gasoonjia/flashdecoding-pp-async-softmax
-                y = sdpa_decode_splitk(q, k, v, attn_mask=attn_mask)
-            else:
-=======
                 from executorch.backends.cuda.triton.kernels.sdpa import (
                     sdpa_decode_splitk,
                 )
@@ -308,7 +299,6 @@ class FullAttention(nn.Module):
             else:
                 from executorch.backends.cuda.triton.kernels.sdpa import sdpa
 
->>>>>>> main
                 y = sdpa(q, k, v, attn_mask=attn_mask, enable_gqa=True)
 
         y = y.transpose(1, 2).contiguous().view(B, T, -1)

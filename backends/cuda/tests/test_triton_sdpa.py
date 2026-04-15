@@ -398,13 +398,9 @@ class TestTritonSdpa(unittest.TestCase):
                 self.assertEqual(out.shape, (B, H_q, Lq, D))
                 self.assertFalse(torch.isnan(out).any())
                 self.assertLess(
-<<<<<<< gasoonjia/flashdecoding-pp-async-softmax
-                    _max_abs_error(out, ref), MAX_ABS_TOL, f"Qwen config Lq={Lq} Lk={Lk}"
-=======
                     _max_abs_error(out, ref),
                     MAX_ABS_TOL,
                     f"Qwen config Lq={Lq} Lk={Lk}",
->>>>>>> main
                 )
 
     # ------------------------------------------------------------------
