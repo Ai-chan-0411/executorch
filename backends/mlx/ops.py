@@ -92,6 +92,7 @@ from executorch.backends.mlx.serialization.mlx_graph_schema import (
     Log1pNode,
     Log2Node,
     LogAddExpNode,
+    BitwiseOrNode,
     LogicalAndNode,
     LogicalNotNode,
     LogicalOrNode,
@@ -454,6 +455,12 @@ _BINARY_OPS: List[Tuple[List[Any], Any, str, bool]] = [
     ([torch.ops.aten.atan2.default], Atan2Node, "aten.atan2", False),
     ([torch.ops.aten.logaddexp.default], LogAddExpNode, "aten.logaddexp", False),
     ([torch.ops.aten.logical_or.default], LogicalOrNode, "aten.logical_or", False),
+    (
+        [torch.ops.aten.bitwise_or.Tensor, torch.ops.aten.bitwise_or.Scalar],
+        BitwiseOrNode,
+        "aten.bitwise_or",
+        True,
+    ),
     (
         [torch.ops.aten.lt.Tensor, torch.ops.aten.lt.Scalar],
         LessNode,

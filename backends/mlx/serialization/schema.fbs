@@ -833,6 +833,12 @@ table PowerNode {
     out: Tid (required);
 }
 
+table BitwiseOrNode {
+    a: Tid (required);
+    b: Tid (required);
+    out: Tid (required);
+}
+
 // =============================================================================
 // Math ops - Reduction
 // =============================================================================
@@ -1113,7 +1119,8 @@ union OpNode {
     GatherMmNode,
     GatherQmmNode,
     ScanNode,
-    MetalKernelNode
+    MetalKernelNode,
+    BitwiseOrNode
     // BC: Add new op nodes here (append only)
 }
 
